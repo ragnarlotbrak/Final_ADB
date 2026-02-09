@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shoe Store - Admin Panel</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="utils.js"></script>
+</head>
+<body>
+  <header>
+    <h1>👟 Shoe Store - Admin</h1>
+    <nav></nav>
+  </header>
+
+  <div class="container">
+    <div class="admin-panel">
+      <div class="admin-tabs">
+        <button onclick="showTab('dashboard')" class="active">Dashboard</button>
+        <button onclick="showTab('shoes')">Manage Shoes</button>
+        <button onclick="showTab('categories')">Categories</button>
+        <button onclick="showTab('orders')">All Orders</button>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="dashboard" class="tab-content">
+        <h3>Sales Dashboard</h3>
+        <div id="statsContainer" class="stats"></div>
+      </div>
+
+      <div id="shoes" class="tab-content hidden">
+        <h3>Manage Shoes</h3>
+        <form id="shoeForm">
+          <div class="form-group">
+            <label>Shoe Name:</label>
+            <input type="text" id="shoeName" required>
+          </div>
+          <div class="form-group">
+            <label>Description:</label>
+            <textarea id="shoeDescription"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Price:</label>
+            <input type="number" id="shoePrice" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label>Size:</label>
+            <input type="text" id="shoeSize" required>
+          </div>
+          <div class="form-group">
+            <label>Color:</label>
+            <input type="text" id="shoeColor">
+          </div>
+          <div class="form-group">
+            <label>Stock:</label>
+            <input type="number" id="shoeStock" required>
+          </div>
+          <div class="form-group">
+            <label>Category:</label>
+            <select id="shoeCategory" required></select>
+          </div>
+          <button type="submit" class="btn">Add Shoe</button>
+          <button type="button" class="btn btn-danger" onclick="clearShoeForm()">Clear</button>
+        </form>
+
+        <h4>Shoes List</h4>
+        <div id="shoesList" class="table-container"></div>
+      </div>
+
+      <div id="categories" class="tab-content hidden">
+        <h3>Manage Categories</h3>
+        <form id="categoryForm">
+          <div class="form-group">
+            <label>Category Name:</label>
+            <input type="text" id="categoryName" required>
+          </div>
+          <div class="form-group">
+            <label>Description:</label>
+            <textarea id="categoryDescription"></textarea>
+          </div>
+          <button type="submit" class="btn">Add Category</button>
+          <button type="button" class="btn btn-danger" onclick="clearCategoryForm()">Clear</button>
+        </form>
+
+        <h4>Categories List</h4>
+        <div id="categoriesList" class="table-container"></div>
+      </div>
+
+      <div id="orders" class="tab-content hidden">
+        <h3>All Orders</h3>
+        <div id="ordersList" class="table-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentShoeId = null;
+
+    function showTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.add('hidden');
+      });
+      
+      document.querySelectorAll('.admin-tabs button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      document.getElementById(tabName).classList.remove('hidden');
+      event.target.classList.add('active');
+
+      if (tabName === 'dashboard') loadDashboard();
+      if (tabName === 'shoes') loadShoes();
+      if (tabName === 'categories') loadCategories();
+      if (tabName === 'orders') loadAllOrders();
+    }
+
+    async function loadDashboard() {
+      try {
+        const stats = await apiCall('/orders/admin/stats');
+        const topShoes = await apiCall('/orders/admin/top-shoes');
+        
+        const statsContainer = document.getElementById('statsContainer');
+        let html = `
+          <div class="dashboard-section">
+            <h4>Sales by Status</h4>
+            <div class="stats-row">
+        `;
+        
+        stats.orders_by_status?.forEach(stat => {
+          html += `
+            <div class="stat-card">
+              <div class="stat-label">${stat._id.toUpperCase()}</div>
+              <div class="stat-number">${stat.count}</div>
+              <div class="stat-label">Revenue: $${stat.total_revenue}</div>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+          <div class="dashboard-section">
+            <h4>Top Selling Shoes</h4>
+            <div class="stats-row">
+        `;
+        
+        topShoes.forEach((shoe, idx) => {
+          html += `
+            <div class="stat-card">
+              <div class="stat-label">${idx + 1}. ${shoe._id}</div>
+              <div class="stat-number">${shoe.quantity_sold}</div>
+              <div class="stat-label">Revenue: $${shoe.revenue}</div>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
+
+        statsContainer.innerHTML = html;
+      } catch(err) {
+      }
+    }
+
+    async function loadCategories() {
+      try {
+        const categories = await apiCall('/categories');
+        
+        const select = document.getElementById('shoeCategory');
+        select.innerHTML = '<option value="">Select a category</option>';
+        categories.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat._id;
+          option.textContent = cat.name;
+          select.appendChild(option);
+        });
+
+        const list = document.getElementById('categoriesList');
+        if (categories.length === 0) {
+          list.innerHTML = '<p>No categories yet</p>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead><tbody>';
+        categories.forEach(cat => {
+          html += `
+            <tr>
+              <td>${cat.name}</td>
+              <td>${cat.description || '-'}</td>
+              <td>
+                <button class="btn btn-danger btn-small" onclick="deleteCategory('${cat._id}')">Delete</button>
+              </td>
+            </tr>
+          `;
+        });
+        html += '</tbody></table>';
+        list.innerHTML = html;
+      } catch(err) {
+      }
+    }
+
+    async function loadShoes() {
+      try {
+        const shoes = await apiCall('/shoes');
+        
+        const list = document.getElementById('shoesList');
+        if (shoes.length === 0) {
+          list.innerHTML = '<p>No shoes yet</p>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Name</th><th>Price</th><th>Stock</th><th>Size</th><th>Actions</th></tr></thead><tbody>';
+        shoes.forEach(shoe => {
+          html += `
+            <tr>
+              <td>${shoe.name}</td>
+              <td>$${shoe.price}</td>
+              <td>${shoe.stock}</td>
+              <td>${shoe.size}</td>
+              <td>
+                <button class="btn btn-small" onclick="editShoe('${shoe._id}')">Edit</button>
+                <button class="btn btn-danger btn-small" onclick="deleteShoe('${shoe._id}')">Delete</button>
+              </td>
+            </tr>
+          `;
+        });
+        html += '</tbody></table>';
+        list.innerHTML = html;
+      } catch(err) {
+      }
+    }
+
+    async function loadAllOrders() {
+      try {
+        const orders = await apiCall('/orders/admin/all');
+        
+        const list = document.getElementById('ordersList');
+        if (orders.length === 0) {
+          list.innerHTML = '<p>No orders yet</p>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Order ID</th><th>Customer</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+        orders.forEach(order => {
+          html += `
+            <tr>
+              <td>${order._id.substring(0, 8)}</td>
+              <td>${order.customer_id.name}</td>
+              <td>$${order.total_amount}</td>
+              <td>
+                <select onchange="updateOrderStatus('${order._id}', this.value)">
+                  <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pending</option>
+                  <option value="confirmed" ${order.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+                  <option value="shipped" ${order.status === 'shipped' ? 'selected' : ''}>Shipped</option>
+                  <option value="delivered" ${order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
+                  <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                </select>
+              </td>
+              <td>
+                <button class="btn btn-small" onclick="viewOrder('${order._id}')">View</button>
+              </td>
+            </tr>
+          `;
+        });
+        html += '</tbody></table>';
+        list.innerHTML = html;
+      } catch(err) {
+      }
+    }
+
+
+    async function editShoe(shoeId) {
+      try {
+        const shoe = await apiCall(`/shoes/${shoeId}`);
+        document.getElementById('shoeName').value = shoe.name;
+        document.getElementById('shoeDescription').value = shoe.description || '';
+        document.getElementById('shoePrice').value = shoe.price;
+        document.getElementById('shoeSize').value = shoe.size;
+        document.getElementById('shoeColor').value = shoe.color || '';
+        document.getElementById('shoeStock').value = shoe.stock;
+        document.getElementById('shoeCategory').value = shoe.category_id._id;
+        currentShoeId = shoeId;
+        
+        document.getElementById('shoeForm').querySelector('button[type="submit"]').textContent = 'Update Shoe';
+      } catch(err) {
+      }
+    }
+
+
+    function clearShoeForm() {
+      document.getElementById('shoeForm').reset();
+      currentShoeId = null;
+      document.getElementById('shoeForm').querySelector('button[type="submit"]').textContent = 'Add Shoe';
+    }
+
+    function clearCategoryForm() {
+      document.getElementById('categoryForm').reset();
+    }
+
+    async function deleteShoe(shoeId) {
+      if (!confirm('Delete this shoe?')) return;
+      
+      try {
+        await apiCall(`/shoes/${shoeId}`, 'DELETE');
+        showSuccess('Shoe deleted');
+        loadShoes();
+      } catch(err) {
+      }
+    }
+
+    async function deleteCategory(categoryId) {
+      if (!confirm('Delete this category?')) return;
+      
+      try {
+        await apiCall(`/categories/${categoryId}`, 'DELETE');
+        showSuccess('Category deleted');
+        loadCategories();
+      } catch(err) {
+      }
+    }
+
+    async function updateOrderStatus(orderId, status) {
+      try {
+        await apiCall(`/orders/${orderId}/status`, 'PUT', { status });
+        showSuccess('Order status updated');
+        loadAllOrders();
+      } catch(err) {
+      }
+    }
+
+    async function viewOrder(orderId) {
+      try {
+        const order = await apiCall(`/orders/user/${orderId}`);
+        alert(`Order #${order._id.substring(0, 8)}\nTotal: $${order.total_amount}\nStatus: ${order.status}\nAddress: ${order.shipping_address}`);
+      } catch(err) {
+      }
+    }
+
+    document.getElementById('shoeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const shoeData = {
+        name: document.getElementById('shoeName').value,
+        description: document.getElementById('shoeDescription').value,
+        price: parseFloat(document.getElementById('shoePrice').value),
+        size: document.getElementById('shoeSize').value,
+        color: document.getElementById('shoeColor').value,
+        stock: parseInt(document.getElementById('shoeStock').value),
+        category_id: document.getElementById('shoeCategory').value
+      };
+
+      try {
+        if (currentShoeId) {
+          await apiCall(`/shoes/${currentShoeId}`, 'PUT', shoeData);
+          showSuccess('Shoe updated');
+        } else {
+          await apiCall('/shoes', 'POST', shoeData);
+          showSuccess('Shoe created');
+        }
+        clearShoeForm();
+        loadShoes();
+      } catch(err) {
+      }
+    });
+
+    document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const categoryData = {
+        name: document.getElementById('categoryName').value,
+        description: document.getElementById('categoryDescription').value
+      };
+
+      try {
+        await apiCall('/categories', 'POST', categoryData);
+        showSuccess('Category created');
+        clearCategoryForm();
+        loadCategories();
+      } catch(err) {
+      }
+    });
+
+    const user = getUser();
+    if (!user || user.role !== 'admin') {
+      window.location.href = 'index.html';
+    }
+  </script>
+</body>
+</html>

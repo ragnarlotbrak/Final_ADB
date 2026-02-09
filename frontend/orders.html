@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Мои заказы</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .orders-container{max-width:960px;margin:2rem auto;padding:0 1rem}
+    .order-empty{text-align:center;color:var(--muted);margin-top:2.5rem}
+    .order-meta{color:var(--muted);margin-bottom:0.5rem}
+    .order-item-right{font-weight:700;color:var(--danger)}
+    .loading{text-align:center;margin-top:1.5rem;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>👟 Shoe Store</h1>
+    <nav></nav>
+  </header>
+  <div class="container orders-container">
+    <h2>My Orders</h2>
+    <div id="status" class="loading">Загрузка...</div>
+    <div id="ordersList"></div>
+  </div>
+
+  <script src="utils.js"></script>
+  <script>
+    async function loadMyOrders(){
+      const token = getToken();
+      if(!token){
+        window.location.href = 'login.html';
+        return;
+      }
+
+      const statusDiv = document.getElementById('status');
+      const list = document.getElementById('ordersList');
+      statusDiv.textContent = 'Loading...';
+      list.innerHTML = '';
+
+      try{
+        const orders = await apiCall('/orders', 'GET');
+
+        if(!orders || orders.length === 0){
+          statusDiv.textContent = '';
+          list.innerHTML = '<div class="empty">You have no orders yet.</div>';
+          return;
+        }
+
+        statusDiv.textContent = '';
+
+        orders.forEach(o => {
+          const card = document.createElement('div');
+          card.className = 'card';
+
+          const created = new Date(o.createdAt || o.date || o._id?.slice(0,8)).toLocaleString();
+
+          const header = document.createElement('div');
+          header.innerHTML = `<h3>Order #${o._id}</h3><div class="order-meta">Date: ${created} — Status: ${o.status || '—'}</div>`;
+          card.appendChild(header);
+
+          const itemsWrapper = document.createElement('div');
+          itemsWrapper.className = 'order-items';
+
+          const items = o.items || o.orderItems || [];
+          if(items.length === 0){
+            itemsWrapper.innerHTML = '<div class="order-empty">No items</div>';
+          } else {
+            items.forEach(it => {
+              const itemRow = document.createElement('div');
+              itemRow.className = 'order-item';
+              const name = it.name || it.shoe_name || it.title || (it.shoe && it.shoe.name) || 'Товар';
+              const qty = it.quantity || it.qty || it.count || 1;
+              const priceNum = (it.price || it.unit_price || it.shoe?.price || 0);
+              const left = document.createElement('div');
+              left.innerHTML = `<div><strong>${name}</strong><br><small>Qty: ${qty}</small></div>`;
+              const right = document.createElement('div');
+              right.className = 'order-item-right';
+              right.textContent = `${(priceNum * qty).toFixed(2)} USD`;
+              itemRow.appendChild(left);
+              itemRow.appendChild(right);
+              itemsWrapper.appendChild(itemRow);
+            });
+          }
+
+          card.appendChild(itemsWrapper);
+
+          const footer = document.createElement('div');
+          footer.style.marginTop = '0.75rem';
+          footer.innerHTML = `<div class="order-meta">Total: ${o.total ? o.total.toFixed(2) : (o.amount ? o.amount.toFixed(2) : '—')} USD</div>` +
+                             (o.shipping_address ? `<div class="order-meta">Shipping Address: ${o.shipping_address}</div>` : '');
+          card.appendChild(footer);
+
+          list.appendChild(card);
+        });
+
+      }catch(err){
+        statusDiv.textContent = '';
+        list.innerHTML = '<div class="empty">Could not load orders. Check your connection.</div>';
+        console.error(err);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadMyOrders();
+      updateNav();
+    });
+  </script>
+</body>
+</html>
+

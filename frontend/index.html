@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shoe Store - Shop</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="utils.js"></script>
+</head>
+<body>
+  <header>
+    <h1>👟 Shoe Store</h1>
+    <nav></nav>
+  </header>
+
+  <div class="container">
+    <h2>Shoes Catalog</h2>
+    
+    <div style="margin-bottom: 2rem;">
+      <input type="text" id="searchInput" placeholder="Search shoes..." style="width: 100%; max-width: 400px; padding: 0.75rem;">
+      <select id="categoryFilter" style="margin-left: 1rem; padding: 0.75rem;">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+
+    <div id="shoeGrid" class="shoe-grid"></div>
+  </div>
+
+  <div class="card" style="max-width: 400px; margin: 2rem auto;">
+    <h3>Shopping Cart</h3>
+    <div id="cart" class="cart"></div>
+  </div>
+
+  <script>
+    let shoes = [];
+    let cart = [];
+
+    async function loadShoes() {
+      try {
+        shoes = await apiCall('/shoes');
+        displayShoes(shoes);
+      } catch(err) {
+
+      }
+    }
+
+    async function loadCategories() {
+      try {
+        const categories = await apiCall('/categories');
+        const select = document.getElementById('categoryFilter');
+        categories.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat._id;
+          option.textContent = cat.name;
+          select.appendChild(option);
+        });
+      } catch(err) {
+      }
+    }
+
+    function displayShoes(shoesToDisplay) {
+      const grid = document.getElementById('shoeGrid');
+      grid.innerHTML = '';
+
+      if (shoesToDisplay.length === 0) {
+        grid.innerHTML = '<p>No shoes found</p>';
+        return;
+      }
+
+      shoesToDisplay.forEach(shoe => {
+        const card = document.createElement('div');
+        card.className = 'shoe-card';
+        card.innerHTML = `
+          <div class="shoe-image">👟</div>
+          <div class="shoe-info">
+            <div class="shoe-name">${shoe.name}</div>
+            <div class="shoe-price">$${shoe.price}</div>
+            <div class="shoe-details">
+              Size: ${shoe.size}<br>
+              Color: ${shoe.color || 'N/A'}<br>
+              Stock: ${shoe.stock}
+            </div>
+            ${shoe.stock > 0 ? `
+              <button class="btn btn-small" onclick="addToCart('${shoe._id}', '${shoe.name}', ${shoe.price}, '${shoe.size}', '${shoe.color || 'N/A'}')">
+                Add to Cart
+              </button>
+            ` : '<button class="btn btn-small" disabled>Out of Stock</button>'}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function addToCart(shoeId, name, price, size, color) {
+      const existingItem = cart.find(item => item.shoe_id === shoeId);
+      
+      if (existingItem) {
+        existingItem.quantity++;
+      } else {
+        cart.push({ shoe_id: shoeId, shoe_name: name, price, size, color, quantity: 1 });
+      }
+      
+      updateCartDisplay();
+      showSuccess(`${name} added to cart!`);
+    }
+
+    function removeFromCart(shoeId) {
+      cart = cart.filter(item => item.shoe_id !== shoeId);
+      updateCartDisplay();
+    }
+
+    function updateQuantity(shoeId, quantity) {
+      const item = cart.find(item => item.shoe_id === shoeId);
+      if (item) {
+        item.quantity = parseInt(quantity) || 1;
+        updateCartDisplay();
+      }
+    }
+
+    function updateCartDisplay() {
+      const cartDiv = document.getElementById('cart');
+      
+      if (cart.length === 0) {
+        cartDiv.innerHTML = '<p>Your cart is empty</p>';
+        return;
+      }
+
+      let total = 0;
+      let html = '<div class="order-items">';
+      
+      cart.forEach(item => {
+        const itemTotal = item.price * item.quantity;
+        total += itemTotal;
+        html += `
+          <div class="order-item">
+            <div>
+              <strong>${item.shoe_name}</strong><br>
+              $${item.price} × 
+              <input type="number" class="quantity-input" value="${item.quantity}" 
+                     onchange="updateQuantity('${item.shoe_id}', this.value)" min="1">
+            </div>
+            <div>
+              <strong>$${itemTotal}</strong>
+              <button class="btn btn-danger btn-small" onclick="removeFromCart('${item.shoe_id}')">Remove</button>
+            </div>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+      html += `<div class="cart-total">Total: $${total}</div>`;
+      
+      const user = getUser();
+      if (user) {
+        html += `<button class="btn btn-success" style="width: 100%; margin-top: 1rem;" onclick="checkout()">Checkout</button>`;
+      } else {
+        html += `<p style="text-align: center; margin-top: 1rem;"><a href="login.html">Login to checkout</a></p>`;
+      }
+
+      cartDiv.innerHTML = html;
+    }
+
+    async function checkout() {
+      if (!getUser()) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      if (cart.length === 0) {
+        showError('Cart is empty');
+        return;
+      }
+
+      const shippingAddress = prompt('Enter shipping address:');
+      if (!shippingAddress) return;
+
+      const paymentDiv = document.createElement('div');
+      paymentDiv.innerHTML = `
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 1000;">
+          <h3>Select Payment Method</h3>
+          <div style="margin: 1rem 0;">
+            <label><input type="radio" name="payment_method" value="credit_card" checked> Credit Card</label><br>
+            <label><input type="radio" name="payment_method" value="debit_card"> Debit Card</label><br>
+            <label><input type="radio" name="payment_method" value="cash"> Cash on Delivery</label>
+          </div>
+          <button id="confirmPayment" class="btn btn-success" style="width: 100%;">Confirm Payment</button>
+          <button id="cancelPayment" class="btn btn-danger" style="width: 100%; margin-top: 0.5rem;">Cancel</button>
+        </div>
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999;"></div>
+      `;
+      document.body.appendChild(paymentDiv);
+
+      document.getElementById('confirmPayment').onclick = async () => {
+        const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
+        document.body.removeChild(paymentDiv);
+
+        try {
+          const result = await apiCall('/orders', 'POST', {
+            items: cart,
+            shipping_address: shippingAddress,
+            payment_method: paymentMethod
+          });
+          
+          showSuccess('Order placed and payment processed successfully!');
+          cart = [];
+          updateCartDisplay();
+          window.location.href = 'orders.html';
+        } catch(err) {
+        }
+      };
+
+      document.getElementById('cancelPayment').onclick = () => {
+        document.body.removeChild(paymentDiv);
+      };
+    }
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filtered = shoes.filter(shoe => 
+        shoe.name.toLowerCase().includes(searchTerm)
+      );
+      displayShoes(filtered);
+    });
+
+    document.getElementById('categoryFilter').addEventListener('change', (e) => {
+      const categoryId = e.target.value;
+      if (!categoryId) {
+        displayShoes(shoes);
+      } else {
+        const filtered = shoes.filter(shoe => shoe.category_id._id === categoryId);
+        displayShoes(filtered);
+      }
+    });
+
+    loadShoes();
+    loadCategories();
+    updateCartDisplay();
+  </script>
+</body>
+</html>
